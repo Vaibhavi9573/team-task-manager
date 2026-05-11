@@ -2,8 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ProtectedRoute } from './ProtectedRoute';
-import { LoginPage } from './pages/LoginPage';
-import { SignupPage } from './pages/SignupPage';
+import { AuthPage } from './pages/AuthPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectPage } from './pages/ProjectPage';
 import { Navbar } from './components/Navbar';
@@ -19,8 +19,10 @@ function AppContent() {
     <div className="min-h-screen bg-gray-50">
       {user && <Navbar />}
       <Routes>
-        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
-        <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
+        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="login" />} />
+        <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="signup" />} />
+        <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="forgot" />} />
+        <Route path="/reset-password" element={user ? <Navigate to="/dashboard" /> : <ResetPasswordPage />} />
         <Route
           path="/dashboard"
           element={

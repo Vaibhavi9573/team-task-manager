@@ -79,11 +79,20 @@ export async function initializeDatabase() {
         expires_at TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS password_resets (
+        token VARCHAR(255) PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects(owner_id);
       CREATE INDEX IF NOT EXISTS idx_project_members_project_id ON project_members(project_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
       CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id);
     `);
 
     console.log('✓ Database tables initialized');
