@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { adminAPI } from '../api';
+import { adminAPI, projectsAPI, usersAPI } from '../api';
 import { useAuth } from '../AuthContext';
-import { AlertCircle, BarChart3, Briefcase, CheckCircle2, Clock3, Users } from 'lucide-react';
+import { AlertCircle, BarChart3, Briefcase, CheckCircle2, Clock3, Users, Plus } from 'lucide-react';
+import { MemberDetailModal } from '../components/MemberDetailModal';
+import { AddMemberModal } from '../components/AddMemberModal';
 
 function StatCard({ label, value, icon: Icon, tone }) {
   return (
@@ -24,13 +26,21 @@ export function AdminDashboardPage() {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [showAddProjectMember, setShowAddProjectMember] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const response = await adminAPI.getOverview();
-        setOverview(response.data);
+        const [overviewRes, projectsRes] = await Promise.all([
+          adminAPI.getOverview(),
+          projectsAPI.getAll()
+        ]);
+        setOverview(overviewRes.data);
+        setProjects(projectsRes.data.projects || []);
       } catch (err) {
         setError('Unable to load admin overview. Make sure PostgreSQL and demo seed data are available.');
       } finally {
@@ -47,7 +57,7 @@ export function AdminDashboardPage() {
 
   const summary = overview?.summary || {};
   const users = summary.users || {};
-  const projects = summary.projects || {};
+  const summaryProjects = summary.projects || {};
   const tasks = summary.tasks || {};
 
   return (
@@ -99,9 +109,13 @@ export function AdminDashboardPage() {
                 </thead>
                 <tbody>
                   {(overview?.team_performance || []).map((member) => (
-                    <tr key={member.id} className="border-b border-slate-100 last:border-b-0">
+                    <tr 
+                      key={member.id}
+                      onClick={() => setSelectedMember(member)}
+                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer transition"
+                    >
                       <td className="py-4 pr-4">
-                        <p className="font-semibold text-slate-950">{member.name}</p>
+                        <p className="font-semibold text-slate-950 hover:text-blue-600">{member.name}</p>
                         <p className="text-xs text-slate-500">{member.email}</p>
                       </td>
                       <td className="py-4 pr-4">{member.total_assigned}</td>
@@ -137,11 +151,82 @@ export function AdminDashboardPage() {
         </div>
 
         <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-950">What admins can manage</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Projects, assignments, overdue work, and member progress are centralized here so the admin can review team delivery quickly.
-          </p>
+          <div className="flex justify-between items-center mb-5">
+            <div>
+              <h2 className="text-xl font-bold text-slate-950">Project Management</h2>
+              <p className="text-sm text-slate-500">Manage team members across projects</p>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedProjectId(projects[0]?.id || null);
+                setShowAddProjectMember(true);
+              }}
+              className="flex gap-2 items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+            >
+              <Plus size={18} />
+              Add Member to Project
+            </button>
+          </div>
+
+          {projects.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              <p>No projects available</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {projects.map(project => (
+                <div key={project.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold text-slate-950">{project.name}</h3>
+                      <p className="text-sm text-slate-600">{project.description || 'No description'}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setShowAddProjectMember(true);
+                      }}
+                      className="flex gap-1 items-center px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition"
+                    >
+                      <Plus size={14} />
+                      Add Member
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
+
+        {/* Member Detail Modal */}
+        {selectedMember && (
+          <MemberDetailModal
+            member={selectedMember}
+            onClose={() => setSelectedMember(null)}
+            onUpdated={() => {
+              // Reload overview data
+              adminAPI.getOverview().then(res => setOverview(res.data)).catch(console.error);
+            }}
+          />
+        )}
+
+        {/* Add Member to Project Modal */}
+        {showAddProjectMember && selectedProjectId && (
+          <AddMemberModal
+            projectId={selectedProjectId}
+            onClose={() => {
+              setShowAddProjectMember(false);
+              setSelectedProjectId(null);
+            }}
+            onAdded={() => {
+              setShowAddProjectMember(false);
+              setSelectedProjectId(null);
+              // Reload data
+              adminAPI.getOverview().then(res => setOverview(res.data)).catch(console.error);
+              projectsAPI.getAll().then(res => setProjects(res.data.projects || [])).catch(console.error);
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -207,6 +207,49 @@ router.delete('/:taskId', async (req, res, next) => {
   }
 });
 
+// Get all tasks (for admin/member access)
+router.get('/', async (req, res, next) => {
+  try {
+    if (isDatabaseOffline()) {
+      // Return all demo tasks
+      const tasks = [];
+      for (const project of [getDemoProjectById(1)]) {
+        if (project) {
+          tasks.push(...getDemoTasksForProject(1));
+        }
+      }
+      return res.json({ tasks });
+    }
+
+    const userId = req.user.id;
+
+    // Get all tasks from projects where user is a member
+    const tasksResult = await query(`
+      SELECT t.*, p.name as project_name, u.name as assigned_to_name
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      LEFT JOIN users u ON t.assigned_to = u.id
+      WHERE p.id IN (
+        SELECT project_id FROM project_members WHERE user_id = $1
+      )
+      ORDER BY t.due_date ASC, t.priority DESC
+    `, [userId]);
+
+    res.json({ tasks: tasksResult.rows });
+  } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const tasks = [];
+      for (const project of [getDemoProjectById(1)]) {
+        if (project) {
+          tasks.push(...getDemoTasksForProject(1));
+        }
+      }
+      return res.json({ tasks });
+    }
+    next(err);
+  }
+});
+
 // Get user's dashboard
 router.get('/dashboard/my-tasks', async (req, res, next) => {
   try {

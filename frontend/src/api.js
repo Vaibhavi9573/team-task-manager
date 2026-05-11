@@ -27,11 +27,13 @@ export const projectsAPI = {
   getOne: (id) => api.get(`/projects/${id}`),
   update: (id, data) => api.put(`/projects/${id}`, data),
   addMember: (projectId, email, role) => api.post(`/projects/${projectId}/members`, { email, role }),
+  removeMember: (projectId, memberId) => api.delete(`/projects/${projectId}/members/${memberId}`),
   getStats: (id) => api.get(`/projects/${id}/stats`)
 };
 
 export const tasksAPI = {
   create: (data) => api.post('/tasks', data),
+  getAll: () => api.get('/tasks'),
   getProjectTasks: (projectId, filters = {}) => api.get(`/tasks/project/${projectId}`, { params: filters }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   delete: (id) => api.delete(`/tasks/${id}`),
