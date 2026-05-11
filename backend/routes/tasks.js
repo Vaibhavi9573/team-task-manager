@@ -1,6 +1,6 @@
 import express from 'express';
 import { isDatabaseOffline, query } from '../db.js';
-import { getDemoMyTasks, getDemoProjectById, getDemoTasksForProject, isDatabaseUnavailable } from '../demoStore.js';
+import { getDemoMyTasks, getDemoProjectById, getDemoTasksForProject, isDatabaseUnavailable, addDemoTask, updateDemoTask, deleteDemoTask } from '../demoStore.js';
 
 const router = express.Router();
 
@@ -9,20 +9,8 @@ router.post('/', async (req, res, next) => {
   try {
     const { title, description, projectId, assignedTo, priority, dueDate } = req.body;
     if (isDatabaseOffline()) {
-      return res.status(201).json({
-        message: 'Task created in demo mode',
-        task: {
-          id: Date.now(),
-          title,
-          description: description || null,
-          project_id: Number(projectId),
-          assigned_to: assignedTo || null,
-          status: 'todo',
-          priority: priority || 'medium',
-          due_date: dueDate || null,
-          created_by: req.user.id
-        }
-      });
+      const task = addDemoTask({ title, description, projectId, assignedTo, priority, dueDate, createdBy: req.user.id });
+      return res.status(201).json({ message: 'Task created in demo mode', task });
     }
 
     const userId = req.user.id;
@@ -125,13 +113,9 @@ router.get('/project/:projectId', async (req, res, next) => {
 router.put('/:taskId', async (req, res, next) => {
   try {
     if (isDatabaseOffline()) {
-      return res.json({
-        message: 'Task updated in demo mode',
-        task: {
-          id: Number(req.params.taskId),
-          ...req.body
-        }
-      });
+      const updated = updateDemoTask(req.params.taskId, req.body);
+      if (!updated) return res.status(404).json({ error: 'Task not found' });
+      return res.json({ message: 'Task updated in demo mode', task: updated });
     }
 
     const { taskId } = req.params;
@@ -188,6 +172,8 @@ router.put('/:taskId', async (req, res, next) => {
 router.delete('/:taskId', async (req, res, next) => {
   try {
     if (isDatabaseOffline()) {
+      const ok = deleteDemoTask(req.params.taskId);
+      if (!ok) return res.status(404).json({ error: 'Task not found' });
       return res.json({ message: 'Task deleted in demo mode' });
     }
 

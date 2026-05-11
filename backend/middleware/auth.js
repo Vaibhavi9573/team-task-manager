@@ -61,6 +61,14 @@ export async function verifyToken(req, res, next) {
 
 export function requireRole(roles) {
   return async (req, res, next) => {
+    // In demo mode, role should already be in req.user from verifyToken
+    if (isDatabaseOffline()) {
+      if (req.user?.role && roles.includes(req.user.role)) {
+        return next();
+      }
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
     try {
       // Fetch user role from DB
       const result = await query('SELECT role FROM users WHERE id = $1', [req.user.id]);

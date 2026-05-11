@@ -1,6 +1,6 @@
 import express from 'express';
 import { isDatabaseOffline, query } from '../db.js';
-import { getDemoUserById, getDemoUserSummary, isDatabaseUnavailable } from '../demoStore.js';
+import { getDemoUserById, getDemoUserSummary, isDatabaseUnavailable, getDemoAllUsers } from '../demoStore.js';
 
 const router = express.Router();
 
@@ -41,13 +41,7 @@ router.get('/me', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   try {
     if (isDatabaseOffline()) {
-      const demoUsers = [getDemoUserById(1), getDemoUserById(2)].filter(Boolean).map((user) => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      }));
-      return res.json({ users: demoUsers });
+      return res.json({ users: getDemoAllUsers() });
     }
 
     const result = await query(
@@ -57,13 +51,7 @@ router.get('/', async (req, res, next) => {
     res.json({ users: result.rows });
   } catch (err) {
     if (isDatabaseUnavailable(err)) {
-      const demoUsers = [getDemoUserById(1), getDemoUserById(2)].filter(Boolean).map((user) => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      }));
-      return res.json({ users: demoUsers });
+      return res.json({ users: getDemoAllUsers() });
     }
     next(err);
   }

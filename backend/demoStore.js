@@ -81,6 +81,10 @@ const tasks = [
 const sessions = new Map();
 const passwordResets = new Map();
 const users = [adminUser, memberUser];
+const projectMembers = new Map();
+projectMembers.set(project.id, new Set([adminUser.id, memberUser.id]));
+let nextProjectId = project.id + 1;
+let nextTaskId = tasks.reduce((m, t) => Math.max(m, t.id), 0) + 1;
 
 export function isDatabaseUnavailable(error) {
   return error?.code === 'ECONNREFUSED' || String(error?.message || '').includes('ECONNREFUSED');
@@ -111,7 +115,69 @@ export function createDemoUser({ email, password, name }) {
     role: 'member'
   };
   users.push(user);
+  // by default add new member to demo project
+  if (!projectMembers.has(project.id)) projectMembers.set(project.id, new Set());
+  projectMembers.get(project.id).add(user.id);
   return user;
+}
+
+export function createDemoProject({ name, description, ownerId }) {
+  const id = nextProjectId++;
+  const newProject = {
+    id,
+    name,
+    description: description || null,
+    owner_id: ownerId,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  // set as current project replacement for demo (single project demo supports list)
+  // push to simple storage by setting project variable (note: not exported mutable variable, but return created project)
+  projectMembers.set(id, new Set([ownerId]));
+  return newProject;
+}
+
+export function addDemoProjectMember(projectId, userId) {
+  projectMembers.set(Number(projectId), projectMembers.get(Number(projectId)) || new Set());
+  projectMembers.get(Number(projectId)).add(Number(userId));
+}
+
+export function removeDemoProjectMember(projectId, userId) {
+  const set = projectMembers.get(Number(projectId));
+  if (!set) return;
+  set.delete(Number(userId));
+}
+
+export function addDemoTask({ title, description, projectId, assignedTo, priority, dueDate, createdBy }) {
+  const task = {
+    id: nextTaskId++,
+    title,
+    description: description || null,
+    project_id: Number(projectId),
+    assigned_to: assignedTo || null,
+    status: 'todo',
+    priority: priority || 'medium',
+    due_date: dueDate || null,
+    created_by: createdBy,
+    updated_at: new Date().toISOString()
+  };
+  tasks.push(task);
+  return task;
+}
+
+export function updateDemoTask(taskId, updates) {
+  const idx = tasks.findIndex((t) => t.id === Number(taskId));
+  if (idx === -1) return null;
+  tasks[idx] = { ...tasks[idx], ...updates, updated_at: new Date().toISOString() };
+  return tasks[idx];
+}
+
+export function deleteDemoTask(taskId) {
+  const idx = tasks.findIndex((t) => t.id === Number(taskId));
+  if (idx === -1) return false;
+  tasks.splice(idx, 1);
+  return true;
 }
 
 export function createDemoSession(userId) {
@@ -279,4 +345,13 @@ export function getDemoUserSummary(userId) {
     role: user.role,
     created_at: new Date().toISOString()
   };
+}
+
+export function getDemoAllUsers() {
+  return users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role
+  }));
 }

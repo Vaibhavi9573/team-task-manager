@@ -1,6 +1,18 @@
 import express from 'express';
+import crypto from 'crypto';
 import { isDatabaseOffline, query } from '../db.js';
-import { getDemoProjectById, getDemoProjectMembers, getDemoProjectsForUser, isDatabaseUnavailable } from '../demoStore.js';
+import {
+  getDemoProjectById,
+  getDemoProjectMembers,
+  getDemoProjectsForUser,
+  getDemoTasksForProject,
+  isDatabaseUnavailable,
+  createDemoUser,
+  findDemoUserByEmail,
+  addDemoProjectMember,
+  removeDemoProjectMember,
+  createDemoProject
+} from '../demoStore.js';
 
 const router = express.Router();
 
@@ -12,6 +24,11 @@ router.post('/', async (req, res, next) => {
 
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
+    }
+
+    if (isDatabaseOffline()) {
+      const project = createDemoProject({ name, description, ownerId: userId });
+      return res.status(201).json({ message: 'Project created in demo mode', project });
     }
 
     const result = await query(
@@ -162,6 +179,17 @@ router.post('/:projectId/members', async (req, res, next) => {
     const { email, role } = req.body;
     const userId = req.user.id;
 
+    if (isDatabaseOffline()) {
+      // ensure demo user exists
+      let existing = findDemoUserByEmail(email);
+      let newMember = existing;
+      if (!existing) {
+        newMember = createDemoUser({ email, password: crypto.randomBytes(6).toString('hex'), name: email.split('@')[0] });
+      }
+      addDemoProjectMember(projectId, newMember.id);
+      return res.status(201).json({ message: 'Member added to project (demo mode)', member: { id: newMember.id, email: newMember.email, name: newMember.name, role: role || 'member' } });
+    }
+
     // Check if user is admin
     const roleCheck = await query(
       'SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2',
@@ -188,6 +216,16 @@ router.post('/:projectId/members', async (req, res, next) => {
 
     res.status(201).json({ message: 'Member added to project', member: result.rows[0] });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      // Fall back to demo mode
+      let existing = findDemoUserByEmail(req.body.email);
+      let newMember = existing;
+      if (!existing) {
+        newMember = createDemoUser({ email: req.body.email, password: crypto.randomBytes(6).toString('hex'), name: req.body.email.split('@')[0] });
+      }
+      addDemoProjectMember(req.params.projectId, newMember.id);
+      return res.status(201).json({ message: 'Member added to project (demo mode)', member: { id: newMember.id, email: newMember.email, name: newMember.name, role: req.body.role || 'member' } });
+    }
     next(err);
   }
 });
@@ -196,6 +234,20 @@ router.post('/:projectId/members', async (req, res, next) => {
 router.get('/:projectId/stats', async (req, res, next) => {
   try {
     const { projectId } = req.params;
+
+    if (isDatabaseOffline()) {
+      const tasks = getDemoTasksForProject(projectId);
+      return res.json({
+        stats: {
+          total_tasks: tasks.length,
+          todo_count: tasks.filter((t) => t.status === 'todo').length,
+          in_progress_count: tasks.filter((t) => t.status === 'in_progress').length,
+          done_count: tasks.filter((t) => t.status === 'done').length,
+          overdue_count: tasks.filter((t) => t.status !== 'done' && new Date(t.due_date) < new Date()).length
+        }
+      });
+    }
+
     const userId = req.user.id;
 
     // Check access
@@ -220,6 +272,50 @@ router.get('/:projectId/stats', async (req, res, next) => {
 
     res.json({ stats: statsResult.rows[0] });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const tasks = getDemoTasksForProject(req.params.projectId);
+      return res.json({
+        stats: {
+          total_tasks: tasks.length,
+          todo_count: tasks.filter((t) => t.status === 'todo').length,
+          in_progress_count: tasks.filter((t) => t.status === 'in_progress').length,
+          done_count: tasks.filter((t) => t.status === 'done').length,
+          overdue_count: tasks.filter((t) => t.status !== 'done' && new Date(t.due_date) < new Date()).length
+        }
+      });
+    }
+    next(err);
+  }
+});
+
+// Remove member from project
+router.delete('/:projectId/members/:memberId', async (req, res, next) => {
+  try {
+    const { projectId, memberId } = req.params;
+    const userId = req.user.id;
+
+    if (isDatabaseOffline()) {
+      removeDemoProjectMember(projectId, memberId);
+      return res.json({ message: 'Member removed (demo mode)' });
+    }
+
+    // Check if user is admin
+    const roleCheck = await query(
+      'SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2',
+      [projectId, userId]
+    );
+
+    if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Only admin can remove members' });
+    }
+
+    await query('DELETE FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, memberId]);
+    res.json({ message: 'Member removed' });
+  } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      removeDemoProjectMember(req.params.projectId, req.params.memberId);
+      return res.json({ message: 'Member removed (demo mode)' });
+    }
     next(err);
   }
 });
