@@ -49,7 +49,7 @@ export function AuthPage({ initialMode = 'login' }) {
     try {
       const response = await authAPI.login(loginData.email, loginData.password);
       login(response.data.token, response.data.user);
-      navigate('/dashboard');
+      navigate(response.data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
@@ -66,8 +66,8 @@ export function AuthPage({ initialMode = 'login' }) {
       return;
     }
 
-    if (signupData.password.length < 8 || !/[A-Z]/.test(signupData.password) || !/[a-z]/.test(signupData.password) || !/\d/.test(signupData.password)) {
-      setError('Password must contain uppercase, lowercase, number, and be at least 8 characters');
+    if (signupData.password.length < 8 || !/[A-Z]/.test(signupData.password) || !/[a-z]/.test(signupData.password) || !/\d/.test(signupData.password) || !/[^A-Za-z0-9]/.test(signupData.password)) {
+      setError('Password must contain uppercase, lowercase, number, special character, and be at least 8 characters');
       return;
     }
 
@@ -76,7 +76,7 @@ export function AuthPage({ initialMode = 'login' }) {
     try {
       const response = await authAPI.signup(signupData.email, signupData.password, signupData.name);
       login(response.data.token, response.data.user);
-      navigate('/dashboard');
+      navigate(response.data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Signup failed');
     } finally {
@@ -288,7 +288,7 @@ export function AuthPage({ initialMode = 'login' }) {
               </div>
 
               <p className="text-xs text-gray-600">
-                Password must contain uppercase, lowercase, number, and 8+ characters.
+                Password must contain uppercase, lowercase, number, special character, and 8+ characters.
               </p>
 
               <button

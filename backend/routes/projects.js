@@ -1,5 +1,6 @@
 import express from 'express';
-import { query } from '../db.js';
+import { isDatabaseOffline, query } from '../db.js';
+import { getDemoProjectById, getDemoProjectMembers, getDemoProjectsForUser, isDatabaseUnavailable } from '../demoStore.js';
 
 const router = express.Router();
 
@@ -35,6 +36,10 @@ router.post('/', async (req, res, next) => {
 // Get user's projects
 router.get('/', async (req, res, next) => {
   try {
+    if (isDatabaseOffline()) {
+      return res.json({ projects: getDemoProjectsForUser() });
+    }
+
     const userId = req.user.id;
 
     const result = await query(`
@@ -46,6 +51,9 @@ router.get('/', async (req, res, next) => {
 
     res.json({ projects: result.rows });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return res.json({ projects: getDemoProjectsForUser() });
+    }
     next(err);
   }
 });
@@ -54,6 +62,15 @@ router.get('/', async (req, res, next) => {
 router.get('/:projectId', async (req, res, next) => {
   try {
     const { projectId } = req.params;
+    if (isDatabaseOffline()) {
+      const project = getDemoProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      return res.json({ project, members: getDemoProjectMembers(projectId) });
+    }
+
     const userId = req.user.id;
 
     // Check if user has access
@@ -82,6 +99,14 @@ router.get('/:projectId', async (req, res, next) => {
 
     res.json({ project, members: membersResult.rows });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const project = getDemoProjectById(req.params.projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      return res.json({ project, members: getDemoProjectMembers(req.params.projectId) });
+    }
     next(err);
   }
 });
@@ -91,6 +116,18 @@ router.put('/:projectId', async (req, res, next) => {
   try {
     const { projectId } = req.params;
     const { name, description, status } = req.body;
+    if (isDatabaseOffline()) {
+      return res.status(200).json({
+        message: 'Project updated in demo mode',
+        project: {
+          ...getDemoProjectById(projectId),
+          name: name || getDemoProjectById(projectId)?.name,
+          description: description || getDemoProjectById(projectId)?.description,
+          status: status || getDemoProjectById(projectId)?.status
+        }
+      });
+    }
+
     const userId = req.user.id;
 
     // Check if user is admin

@@ -1,4 +1,5 @@
-import { query } from '../db.js';
+import { isDatabaseOffline, query } from '../db.js';
+import { getDemoSession, getDemoUserById, isDatabaseUnavailable } from '../demoStore.js';
 
 // Verify session token from `sessions` table
 export async function verifyToken(req, res, next) {
@@ -6,6 +7,21 @@ export async function verifyToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) return res.status(401).json({ error: 'No token provided' });
+
+  if (isDatabaseOffline()) {
+    const session = getDemoSession(token);
+    if (!session) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+
+    const demoUser = getDemoUserById(session.userId);
+    if (!demoUser) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = { id: demoUser.id, role: demoUser.role };
+    return next();
+  }
 
   try {
     // Look up token in sessions table
@@ -24,6 +40,20 @@ export async function verifyToken(req, res, next) {
     req.user = { id: session.user_id };
     next();
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const session = getDemoSession(token);
+      if (!session) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+
+      const demoUser = getDemoUserById(session.userId);
+      if (!demoUser) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+
+      req.user = { id: demoUser.id, role: demoUser.role };
+      return next();
+    }
     console.error('verifyToken error', err);
     return res.status(500).json({ error: 'Server error' });
   }
@@ -40,6 +70,12 @@ export function requireRole(roles) {
       req.user.role = role;
       next();
     } catch (err) {
+      if (isDatabaseUnavailable(err)) {
+        if (req.user?.role && roles.includes(req.user.role)) {
+          return next();
+        }
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
       console.error('requireRole error', err);
       return res.status(500).json({ error: 'Server error' });
     }

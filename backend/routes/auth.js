@@ -1,7 +1,16 @@
 import express from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { query } from '../db.js';
+import { isDatabaseOffline, query } from '../db.js';
+import {
+  createDemoReset,
+  createDemoSession,
+  createDemoUser,
+  consumeDemoReset,
+  findDemoUserByEmail,
+  isDatabaseUnavailable,
+  verifyDemoPassword
+} from '../demoStore.js';
 
 const router = express.Router();
 
@@ -42,6 +51,12 @@ async function sendResetEmail(email, resetUrl) {
   return { sent: true };
 }
 
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${derivedKey}`;
+}
+
 /**
  * ========== SIGNUP ROUTE ==========
  * POST /api/auth/signup
@@ -56,13 +71,32 @@ async function sendResetEmail(email, resetUrl) {
  * Backend returns: { token, user }
  */
 router.post('/signup', async (req, res, next) => {
+  let email;
+  let password;
+  let name;
+  const demoMode = isDatabaseOffline();
   try {
     // Extract data from request body
-    const { email, password, name } = req.body;
+    ({ email, password, name } = req.body);
 
     // ✅ VALIDATION: Check all required fields exist
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required' });
+    }
+
+    if (demoMode) {
+      const user = createDemoUser({ email, password, name });
+      const session = createDemoSession(user.id);
+      return res.status(201).json({
+        message: 'User registered successfully',
+        token: session.token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
     }
 
     // 📋 CHECK IF EMAIL ALREADY EXISTS
@@ -106,6 +140,24 @@ router.post('/signup', async (req, res, next) => {
       }
     });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      try {
+        const user = createDemoUser({ email, password, name });
+        const session = createDemoSession(user.id);
+        return res.status(201).json({
+          message: 'User registered successfully',
+          token: session.token,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+          }
+        });
+      } catch (demoErr) {
+        return next(demoErr);
+      }
+    }
     next(err);
   }
 });
@@ -124,13 +176,35 @@ router.post('/signup', async (req, res, next) => {
  * Backend returns: { token, user }
  */
 router.post('/login', async (req, res, next) => {
+  let email;
+  let password;
+  const demoMode = isDatabaseOffline();
   try {
     // Extract email and password from request
-    const { email, password } = req.body;
+    ({ email, password } = req.body);
 
     // ✅ VALIDATION: Check both fields exist
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (demoMode) {
+      const user = verifyDemoPassword(email, password);
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      const session = createDemoSession(user.id);
+      return res.json({
+        message: 'Logged in successfully',
+        token: session.token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
     }
 
     // 🔍 FIND USER BY EMAIL
@@ -168,16 +242,49 @@ router.post('/login', async (req, res, next) => {
       }
     });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const user = verifyDemoPassword(email, password);
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      const session = createDemoSession(user.id);
+      return res.json({
+        message: 'Logged in successfully',
+        token: session.token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
+    }
     next(err);
   }
 });
 
 router.post('/forgot-password', async (req, res, next) => {
+  let email;
+  const demoMode = isDatabaseOffline();
   try {
-    const { email } = req.body;
+    ({ email } = req.body);
 
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
+    }
+
+    if (demoMode) {
+      const token = createDemoReset(email);
+      if (!token) {
+        return res.json({ message: 'If that email exists, a reset link has been sent.' });
+      }
+
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.json({
+        message: 'If that email exists, a reset link has been sent.',
+        resetUrl: `${baseUrl}/reset-password?token=${token}`
+      });
     }
 
     const result = await query('SELECT id, name FROM users WHERE email = $1', [email]);
@@ -204,16 +311,41 @@ router.post('/forgot-password', async (req, res, next) => {
       ...(emailResult.sent ? {} : { resetUrl })
     });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const user = findDemoUserByEmail(email);
+      if (!user) {
+        return res.json({ message: 'If that email exists, a reset link has been sent.' });
+      }
+
+      const token = createDemoReset(email);
+      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+      return res.json({
+        message: 'If that email exists, a reset link has been sent.',
+        resetUrl
+      });
+    }
     next(err);
   }
 });
 
 router.post('/reset-password', async (req, res, next) => {
+  let token;
+  let password;
+  const demoMode = isDatabaseOffline();
   try {
-    const { token, password } = req.body;
+    ({ token, password } = req.body);
 
     if (!token || !password) {
       return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (demoMode) {
+      const user = consumeDemoReset(token, password);
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired reset link' });
+      }
+
+      return res.json({ message: 'Password updated successfully' });
     }
 
     const resetResult = await query(
@@ -241,6 +373,14 @@ router.post('/reset-password', async (req, res, next) => {
 
     res.json({ message: 'Password updated successfully' });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const user = consumeDemoReset(token, password);
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired reset link' });
+      }
+
+      return res.json({ message: 'Password updated successfully' });
+    }
     next(err);
   }
 });

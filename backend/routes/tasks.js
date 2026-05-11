@@ -1,5 +1,6 @@
 import express from 'express';
-import { query } from '../db.js';
+import { isDatabaseOffline, query } from '../db.js';
+import { getDemoMyTasks, getDemoProjectById, getDemoTasksForProject, isDatabaseUnavailable } from '../demoStore.js';
 
 const router = express.Router();
 
@@ -7,6 +8,23 @@ const router = express.Router();
 router.post('/', async (req, res, next) => {
   try {
     const { title, description, projectId, assignedTo, priority, dueDate } = req.body;
+    if (isDatabaseOffline()) {
+      return res.status(201).json({
+        message: 'Task created in demo mode',
+        task: {
+          id: Date.now(),
+          title,
+          description: description || null,
+          project_id: Number(projectId),
+          assigned_to: assignedTo || null,
+          status: 'todo',
+          priority: priority || 'medium',
+          due_date: dueDate || null,
+          created_by: req.user.id
+        }
+      });
+    }
+
     const userId = req.user.id;
 
     if (!title || !projectId) {
@@ -31,6 +49,22 @@ router.post('/', async (req, res, next) => {
 
     res.status(201).json({ message: 'Task created', task: result.rows[0] });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return res.status(201).json({
+        message: 'Task created in demo mode',
+        task: {
+          id: Date.now(),
+          title: req.body.title,
+          description: req.body.description || null,
+          project_id: Number(req.body.projectId),
+          assigned_to: req.body.assignedTo || null,
+          status: 'todo',
+          priority: req.body.priority || 'medium',
+          due_date: req.body.dueDate || null,
+          created_by: req.user.id
+        }
+      });
+    }
     next(err);
   }
 });
@@ -39,6 +73,15 @@ router.post('/', async (req, res, next) => {
 router.get('/project/:projectId', async (req, res, next) => {
   try {
     const { projectId } = req.params;
+    if (isDatabaseOffline()) {
+      const project = getDemoProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Access denied' });
+      }
+
+      return res.json({ tasks: getDemoTasksForProject(projectId) });
+    }
+
     const { status, assignedTo } = req.query;
     const userId = req.user.id;
 
@@ -70,6 +113,10 @@ router.get('/project/:projectId', async (req, res, next) => {
     const result = await query(sql, params);
     res.json({ tasks: result.rows });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      const tasks = getDemoTasksForProject(req.params.projectId);
+      return res.json({ tasks });
+    }
     next(err);
   }
 });
@@ -77,6 +124,16 @@ router.get('/project/:projectId', async (req, res, next) => {
 // Update task
 router.put('/:taskId', async (req, res, next) => {
   try {
+    if (isDatabaseOffline()) {
+      return res.json({
+        message: 'Task updated in demo mode',
+        task: {
+          id: Number(req.params.taskId),
+          ...req.body
+        }
+      });
+    }
+
     const { taskId } = req.params;
     const { title, description, status, priority, assignedTo, dueDate } = req.body;
     const userId = req.user.id;
@@ -114,6 +171,15 @@ router.put('/:taskId', async (req, res, next) => {
 
     res.json({ message: 'Task updated', task: result.rows[0] });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return res.json({
+        message: 'Task updated in demo mode',
+        task: {
+          id: Number(req.params.taskId),
+          ...req.body
+        }
+      });
+    }
     next(err);
   }
 });
@@ -121,6 +187,10 @@ router.put('/:taskId', async (req, res, next) => {
 // Delete task
 router.delete('/:taskId', async (req, res, next) => {
   try {
+    if (isDatabaseOffline()) {
+      return res.json({ message: 'Task deleted in demo mode' });
+    }
+
     const { taskId } = req.params;
     const userId = req.user.id;
 
@@ -144,6 +214,9 @@ router.delete('/:taskId', async (req, res, next) => {
     await query('DELETE FROM tasks WHERE id = $1', [taskId]);
     res.json({ message: 'Task deleted' });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return res.json({ message: 'Task deleted in demo mode' });
+    }
     next(err);
   }
 });
@@ -151,6 +224,13 @@ router.delete('/:taskId', async (req, res, next) => {
 // Get user's dashboard
 router.get('/dashboard/my-tasks', async (req, res, next) => {
   try {
+    if (isDatabaseOffline()) {
+      return res.json({
+        tasks: getDemoMyTasks(req.user.id),
+        overdue_count: 1
+      });
+    }
+
     const userId = req.user.id;
 
     // Get assigned tasks
@@ -174,6 +254,12 @@ router.get('/dashboard/my-tasks', async (req, res, next) => {
       overdue_count: overdueResult.rows[0].count
     });
   } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return res.json({
+        tasks: getDemoMyTasks(req.user.id),
+        overdue_count: 1
+      });
+    }
     next(err);
   }
 });

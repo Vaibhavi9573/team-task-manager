@@ -43,4 +43,9 @@ export const usersAPI = {
   getAll: () => api.get('/users')
 };
 
+export const adminAPI = {
+  getOverview: () => api.get('/admin/overview'),
+  getMembers: () => api.get('/admin/members')
+};
+
 export default api;

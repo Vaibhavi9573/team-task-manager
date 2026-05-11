@@ -5,8 +5,23 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { AuthPage } from './pages/AuthPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { ProjectPage } from './pages/ProjectPage';
 import { Navbar } from './components/Navbar';
+
+function RoleRoute({ roles, children }) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!roles.includes(user.role)) {
+    return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} />;
+  }
+
+  return children;
+}
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -19,15 +34,27 @@ function AppContent() {
     <div className="min-h-screen bg-gray-50">
       {user && <Navbar />}
       <Routes>
-        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="login" />} />
-        <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="signup" />} />
-        <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" /> : <AuthPage initialMode="forgot" />} />
-        <Route path="/reset-password" element={user ? <Navigate to="/dashboard" /> : <ResetPasswordPage />} />
+        <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} /> : <AuthPage initialMode="login" />} />
+        <Route path="/signup" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} /> : <AuthPage initialMode="signup" />} />
+        <Route path="/forgot-password" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} /> : <AuthPage initialMode="forgot" />} />
+        <Route path="/reset-password" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} /> : <ResetPasswordPage />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <RoleRoute roles={['admin']}>
+                <AdminDashboardPage />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <RoleRoute roles={['member', 'admin']}>
+                <DashboardPage />
+              </RoleRoute>
             </ProtectedRoute>
           }
         />
@@ -39,7 +66,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+        <Route path="/" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} /> : <Navigate to="/login" />} />
       </Routes>
     </div>
   );

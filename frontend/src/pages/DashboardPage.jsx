@@ -5,6 +5,21 @@ import { Plus, Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { CreateProjectModal } from '../components/CreateProjectModal';
 import { Link } from 'react-router-dom';
 
+const demoProjects = [
+  {
+    id: 1,
+    name: 'Q2 Product Launch',
+    description: 'Launch assets, timeline, and final release prep',
+    created_at: new Date().toISOString()
+  }
+];
+
+const demoTasks = [
+  { id: 1, title: 'Prepare launch timeline', project_name: 'Q2 Product Launch', status: 'done', due_date: new Date().toISOString() },
+  { id: 2, title: 'Design campaign assets', project_name: 'Q2 Product Launch', status: 'in_progress', due_date: new Date().toISOString() },
+  { id: 3, title: 'Review landing page copy', project_name: 'Q2 Product Launch', status: 'todo', due_date: new Date().toISOString() }
+];
+
 export function DashboardPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -27,7 +42,10 @@ export function DashboardPage() {
         setMyTasks(tasksRes.data.tasks || []);
         setStats(tasksRes.data);
       } catch (err) {
-        setError('Failed to load data');
+        setError('Showing demo data because the database is offline');
+        setProjects(demoProjects);
+        setMyTasks(demoTasks);
+        setStats({ overdue_count: 1 });
         console.error(err);
       } finally {
         setLoading(false);
@@ -52,7 +70,7 @@ export function DashboardPage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Member Dashboard</h1>
             <p className="text-gray-600">Welcome, {user?.name}</p>
           </div>
           <button

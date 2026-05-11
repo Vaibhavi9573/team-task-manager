@@ -1,13 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './db.js';
+import { initializeDatabase, setDatabaseOffline } from './db.js';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import taskRoutes from './routes/tasks.js';
 import taskAdvancedRoutes from './routes/taskAdvanced.js';
 import analyticsRoutes from './routes/analytics.js';
 import userRoutes from './routes/users.js';
+import adminRoutes from './routes/admin.js';
 import { verifyToken } from './middleware/auth.js';
 
 dotenv.config();
@@ -17,7 +18,22 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173'
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:5175',
+      'http://localhost:5176',
+      'http://localhost:5177'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 }));
 app.use(express.json());
 
@@ -30,6 +46,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 
 // Protected routes
+app.use('/api/admin', verifyToken, adminRoutes);
 app.use('/api/users', verifyToken, userRoutes);
 app.use('/api/projects', verifyToken, projectRoutes);
 app.use('/api/tasks', verifyToken, taskRoutes);
@@ -55,11 +72,12 @@ async function start() {
     });
   } catch (err) {
     if (err.code === 'ECONNREFUSED') {
+      setDatabaseOffline(true);
       console.warn('Database is not running, starting backend in limited mode.');
       app.listen(PORT, () => {
         console.log(`✓ Server running on port ${PORT}`);
         console.log(`✓ API: http://localhost:${PORT}`);
-        console.log('⚠ Database calls will fail until PostgreSQL is running and DATABASE_URL is valid.');
+        console.log('⚠ Running in demo mode because PostgreSQL is offline. Auth and admin/member portals use in-memory sample data.');
       });
       return;
     }
