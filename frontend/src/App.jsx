@@ -7,7 +7,6 @@ import { SignupPage } from './pages/SignupPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectPage } from './pages/ProjectPage';
 import { Navbar } from './components/Navbar';
-import './App.css';
 
 function AppContent() {
   const { user, loading } = useAuth();
