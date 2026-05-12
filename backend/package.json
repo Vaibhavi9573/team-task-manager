@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "postinstall": "npm --prefix ../frontend install && npm --prefix ../frontend run build"
   },
   "dependencies": {
     "cors": "^2.8.5",

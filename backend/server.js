@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { initializeDatabase, setDatabaseOffline } from './db.js';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
@@ -52,6 +54,18 @@ app.use('/api/projects', verifyToken, projectRoutes);
 app.use('/api/tasks', verifyToken, taskRoutes);
 app.use('/api/analytics', verifyToken, analyticsRoutes);
 app.use('/api/tasks-advanced', verifyToken, taskAdvancedRoutes);
+
+// Serve frontend in production from backend
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
