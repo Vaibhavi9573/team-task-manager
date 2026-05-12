@@ -29,7 +29,10 @@ const corsOptions = {
       'http://localhost:5176',
       'http://localhost:5177'
     ];
-    if (!origin || allowedOrigins.includes(origin)) {
+
+    const isRailwayOrigin = typeof origin === 'string' && origin.endsWith('.up.railway.app');
+
+    if (!origin || allowedOrigins.includes(origin) || isRailwayOrigin) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
